@@ -1,5 +1,5 @@
 ---
-title: "Project"
+title: "Advanced Econometri project - Pre-existing conditions associated with COVID-19 fatality "
 author: "Serena Bozheku and Jabir Kangarli"
 date: "8/23/2021"
 output: html_document
