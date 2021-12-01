@@ -1,6 +1,6 @@
 # Pre-existing-conditions-associated-with-COVID-19-fatality
 
-Pre-existing conditions associated with COVID-19 fatality
+
 Main hypothesis: The existence of pre-existing conditions or habits related to the respiratory tract increase the probability of fatality
 Alternative hypothesis: the fatal outcome is not necessarily related to conditions related to the respiratory tract.
 
