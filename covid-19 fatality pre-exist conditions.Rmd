@@ -1,0 +1,297 @@
+---
+title: "Project"
+author: "Serena Bozheku and Jabir Kangarli"
+date: "8/23/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+<br>
+
+### Pre-existing conditions associated with COVID-19 fatality  
+#### Main hypothesis: The existence of pre-existing conditions or habits related to the respiratory tract increase the probability of fatality 
+                                                                         
+#### Alternative hypothesis: the fatal outcome is not necessarily related to conditions related to the respiratory tract. 
+
+<br>
+<br>
+
+##### We will be using the following dataset from Kaggle: 
+#####https://www.kaggle.com/tanmoyx/covid19-patient-precondition-dataset?select=covid.csv
+
+<br>
+
+##### The dataset holds information about pre-existing conditions of patients from Mexico, such as asthma, obesity, hypertension, cardiovascular disease, Chronic obstructive pulmonary disease (copd), smoking habits, etc., and it was initially released by the Mexican government. The dataset contains also information such as age, gender, icu (intensive care unit) and date of death information which we can turn into a binary variable “death”. 
+
+<br>
+
+##### The Coronavirus pandemic caught us all off-guard and one thing we learned from it is that our healthcare systems come short of providing a safety plan in case of such events. During the course of the pandemic there were multiple reports that certain demographic and clinical characteristics may lead infected patients to more severe symptoms. 
+##### In order to observe associations between the pre-existing conditions and the fatality of the virus, we will use a binary logistic regression with variable “death” as the depended one. 
+##### Our main hypothesis is that the existence of pre-existing conditions or habits related to the respiratory tract such as pneumonia, asthma, copd and smoking habit increase the probability of fatality. 
+
+
+```{r  message=FALSE, warning=FALSE}
+
+
+library("tidyverse")
+library("dplyr")
+library("caret")
+library("blorr")
+library("DescTools")
+library("sandwich")
+library("lmtest")
+library("MASS")
+library("mfx")
+library("htmltools")
+library("LogisticDx")
+library("aod")
+library("logistf")
+library("leaps")
+library("DataExplorer")
+```
+
+#### I. Introduction to the data set
+``` {r}
+setwd("C:/Users/Dell/Desktop/AdvEcon_project")
+data = as.data.frame(read.csv("covid.csv"))
+head(data)
+nrow(data)
+ncol(data)
+```
+##### The data set contains 566,602 rows and 23 columns(the first one is index).
+##### The data dictionary is provided as below:
+1. id: The identification number of the patient.
+
+2. sex: Identify gender of the patient, 1 as female and 2 as male.
+
+3. patient_type: Type of patient, 1 for not hospitalized and 2 for hosptalized.
+
+4. entry_date: The date that the patient went to the hospital.
+
+5. date_symptoms: The date that the patient started to show symptoms.
+
+6. date_died: The date that the patient died, “9999-99-99” stands for recovered.
+
+7. intubed: Intubation is a procedure that’s used when you can’t breathe on your own. Your doctor puts a tube down your throat and into your windpipe to make it easier to get air into and out of your lungs. A machine called a ventilator pumps in air with extra oxygen. Then it helps you breathe out air that’s full of carbon dioxide (CO2). “1” denotes that the patient used ventilator and “2” denotes that the patient did not, “97” “98” “99” means not specified.
+
+8. pneumonia: Indicates whether the patient already have air sacs inflammation or not “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+9. age: Specifies the age of the patient.
+
+10. pregnancy: Indicates whether the patient is pregnant or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+11. diabetes: Indicates whether the patient has diabetes or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+12. copd: Indicates whether the patient has Chronic obstructive pulmonary disease (COPD) or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+13. asthma: Indiactes whether the patient has asthma or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+14. inmsupr: Indicates whether the patient is immunosuppressed or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+15. hypertension: Indicates whether the patient has hypertension or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+16. other_disease: Indicates whether the patient has other disease or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+17. cardiovascular: Indicates whether if the patient has heart or blood vessels realted disease, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+18. obesity: Indicates whether the patient is obese or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+19. renal_chronic: Indicates whether the patient has chronic renal disease or not, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+20. tobacco: Indicates whether if the patient is a tobacco user, “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+21. contact_other_covid: Indicates whether if the patient has contacted another covid19 patient.
+
+22. icu: Indicates whether the if the patient had been admitted to an Intensive Care Unit (ICU), “1” for yes, “2” for no, “97” “98” “99” means not specified.
+
+
+#### II.Data Processing
+
+##### Firstly, we chose to omit id and patient_type columns as they don't have any useful information for us.
+```{r}
+data$id = NULL 
+data$patient_type = NULL 
+```
+##### We check the data type of each column
+```{r}
+str(data)
+```
+##### It looks like all the columns containing date information are of chr type. Also, age variable is a continuous variable
+##### In order to process the data, we will split our data set into two parts: _subset_, which will contain all date related variables and the continuous variable; _data_, which will contain the categorical variables.
+
+```{r}
+subset = data[ ,c(2,3,4,7)]
+
+data = data[ , -c(2,3,4,7)]
+```
+##### Working with the data subset, we will convert the variables into numerical type, and then transform the categorical variables into binary one, which have values 0 and 1
+```{r}
+data = apply(data, 2, as.numeric)
+
+#the function below assigns 0 as no and 1 as yes
+btransform <- function(x){
+  temp = case_when(
+    x == 1 ~ 1, 
+    x == 2 ~ 0,
+    TRUE ~ 100 # 100 is the flag for NA
+  )
+  return(temp)
+}
+
+#converting categorical variables into binary ones
+data = as.data.frame(apply(data, 2, btransform))
+```
+###### In subset, we will use _date_died_ variable to create our dependant variable of interest **death**, which takes value 1 if the patient died and 0 otherwise
+```{r}
+subset = subset %>% mutate(
+  subset,
+  death = ifelse(date_died == "9999-99-99", 0, 1))
+
+#we'll date_died since we won't need it anymore
+subset$date_died=NULL
+```
+
+##### Next, we define a new variable **duration**, using _date_symptoms_ and _entry_date_, which contains information about the time between the patient noticed the symptoms and the day they went to the hospital.
+```{r}
+subset$date_symptoms = as.Date(subset$date_symptoms, 
+                               format = "%Y-%m-%d")
+subset$entry_date = as.Date(subset$entry_date, 
+                            format = "%Y-%m-%d")
+subset$duration = as.numeric(subset$entry_date - subset$date_symptoms) 
+#we'll delete date_symptoms and entry_date as we won't need them anymore
+subset$entry_date=NULL
+subset$date_symptoms=NULL
+```
+
+##### We'll combine the two subsets into a main dataset and we'll replace NA flag with NA value. 
+
+```{r}
+data = cbind(data, subset) 
+
+data[data == 100] = NA 
+head(data)
+```
+
+##### Since we are interested only in the confirmed COVID-19 cases, we will drop everything else where covid_res is not 1. Afterwards, we will delete covid_res column as it won't be needed anymore.
+```{r}
+data <- filter(data, data$covid_res == 1)
+data$covid_res=NULL
+
+```
+##### Let's check for missing values and let's deal with them if there any.
+```{r}
+colSums(is.na(data)) %>%  sort()
+plot_missing(data)
+```
+##### It seems like contact_other_covid, pregnancy, intubed and icu have a considerable amount of missing values (more than 5%), so we chose to omit them
+```{r}
+data$icu=NULL
+data$intubed=NULL
+data$pregnancy=NULL
+data$contact_other_covid=NULL
+
+#let's omit all NA values as well
+data <- na.omit(data)
+head(data)
+```
+
+##### Let's check the correlation between the variables.
+```{r}
+res <- cor(data)
+round(res, 2)
+
+library(corrplot)
+corrplot(res, type = "upper", order = "hclust", 
+         tl.col = "black", tl.srt = 45)
+
+```
+
+```{r}
+findCorrelation(res, names = TRUE, cutoff = 0.7)
+```
+
+##### There aren't any highly correlated variables, so there is no need to discard any variables in this step.
+
+<br>
+##### We'll convert categorical variables into factor type
+
+```{r}
+for(i in 1:15){
+      if(i == 13 | i == 15) next
+  data[ ,i] = factor(data[ ,i],
+                     levels = c("0", "1"))
+}
+table(data$death)
+
+```
+
+<br>
+
+#### III. Fitting the binary logistic model and interpretation
+##### We run first the unrestricted model, where death is the dependent variable and we use all the other variables to explain it.
+```{r}
+mylogit = glm(data = data,
+            formula = death~.,
+            family = binomial(link = "logit"))
+summary(mylogit)
+
+```
+##### All the variables seem to be statistically significant. However, a bit against intuition in our opinion, it seems that tobacco use, patients affected by cardiovascular disease and asthma, as well as being a female, decrease the odds of dying from covid. All the other variables affect positively our variable of interest. 
+#It looks like cardiovascular, tobacco and asthma variables are less statistically significant when compared to others.We will omit them, when specifying the model.
+
+##### First, based on our initial hypothesis we run a restriced model only with the variables of interest to us and then we run the likelihood ratio test to test this hypothesis
+```{r}
+
+mylogit_restricted=glm(data = data,
+            formula = death~pneumonia + asthma + cardiovascular + tobacco + copd,
+            family = binomial(link = "logit"))
+summary(mylogit_restricted)
+lrtest(mylogit, mylogit_restricted)
+```
+##### The hypothesis of lrtest is that βsex, βdiabetes, βinmsupr, βhypertension, βother_disease, βcardiovascular, βobesity, βrenal_chronic, βage and βduration are all equal to 0.
+##### The test statistic is equal to 14001 and the p-value is less than 0, so we reject the null hypothesis. This means that our initial hypothesis, which states that pre-existing conditions or habits related to the respiratory tract predominantly increase the probability of fatality compared to the other variables, doesn't stand.
+
+<br>
+#### Let's run the first model again, this time omitting the variables tobacco, asthma and cardiovascular. The hypothesis for lrtest statistics in this case is that βtobacco=0, βcardiovascular = 0 and βtobacco = 0.
+```{r}
+mylogit_restricted1 = glm(data = data,
+            formula = death ~ sex + pneumonia +diabetes + copd + 
+              inmsupr + hypertension + other_disease + obesity + 
+              renal_chronic  + age + duration,
+            family = binomial(link = "probit"))
+summary(mylogit_restricted1)
+lrtest(mylogit, mylogit_restricted1)
+
+```
+##### From the summary of the model, all the variables again seem to be statistically significant. The test statistic is equal to 17.889 and p-value is less than 0, so we reject the null hypothesis of this test. This mean that we shouldn't omit the three variables mentioned above.
+
+##### We tried running the model by omitting everytime a different variable to find an appropriate model, however we get the same result that all the variables are statistically significant.
+
+```{r}
+PseudoR2(mylogit, which="all")
+# adjusted R^2
+blr_rsq_adj_count(mylogit) 
+
+
+#count R^2
+blr_rsq_count(mylogit)
+```
+##### Adj. R^2 statistics= 0.07: only 7% of the predictions were correct because of the variation of explanatory variable
+##### Count R^2 statistic= 0.88: our model correctly predicts 88% of all observations
+
+<br>
+
+###Conclussion:
+####In statistics, the logistic model (or logit model) is used to model the probability of a certain class or event existing such as dead/alive. 
+
+##### Since all variables are statistically significant, we can conclude that they are directly affecting the death variable.
+
+<br>
+
+##### Bibliography 
+1. Lecture and class presentations - Rafal Wozniak
+2. Logistic Regression Models - Joseph M. Hilbe
+3. Binary Logistic Regression - Sreejesh S, Sanjay Mohapatra, Dr Anusree M.R
+4. Applied Econometrics with R - Christian KleiberAchim Zeileis
